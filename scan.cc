@@ -1,6 +1,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <iostream>
+#include <sstream>
 #include <stdint.h>
 #include <glibmm.h>
 #include <sys/types.h>
@@ -12,6 +13,7 @@
 #include <boost/icl/interval_set.hpp>
 
 FT_Library library;
+const char *dbname = "db.db";
 
 void scan (const char *path, boost::icl::interval_set<FT_ULong> &set) {
     FTS *fts;
@@ -41,7 +43,8 @@ void scan (const char *path, boost::icl::interval_set<FT_ULong> &set) {
     }
 }
 
-void rebuild_db () {
+void rebuild_db ()
+{
     int res;
 
     res = FT_Init_FreeType (&library);
@@ -54,7 +57,7 @@ void rebuild_db () {
 
     sqlite3 *db;
 
-    sqlite3_open ("db.db", &db);
+    sqlite3_open (dbname, &db);
     sqlite3_exec (db,
         "DROP TABLE IF EXISTS fonts; "
         "DROP TABLE IF EXISTS glyphs; "
@@ -124,9 +127,67 @@ void rebuild_db () {
     std::cout << "done." << std::endl;
 }
 
+void usage (void)
+{
+    std::cout << "Usage:" << std::endl;
+    std::cout << "  findglyph rebuild" << std::endl;
+    std::cout << "     rebuilds database. Needs unpacked packages in ./fonts/ directory" << std::endl;
+    std::cout << "  findglyph search <...>" << std::endl;
+    std::cout << "     searches for packages which has font to render glyph" << std::endl;
+}
+
+void search (const Glib::ustring& s)
+{
+    sqlite3 *db;
+    sqlite3_open (dbname, &db);
+
+    std::string sql;
+
+    bool firsttime = true;
+    for (unsigned int k = 0; k < s.size(); k ++) {
+        if (firsttime) firsttime = false;
+        else sql += " INTERSECT ";
+        std::stringstream ks;
+        ks << (k+1);
+        sql += "SELECT name FROM fonts,glyphs WHERE fonts.id=glyphs.font and c_from <= ?";
+        sql += ks.str();
+        sql += " and ?";
+        sql += ks.str();
+        sql += " <= c_to";
+    }
+
+    sqlite3_stmt *stmt;
+    sqlite3_prepare_v2 (db, sql.c_str(), -1, &stmt, NULL);
+    for (unsigned int k = 0; k < s.size(); k ++) {
+        sqlite3_bind_text (stmt, k + 1, s.substr(k, 1).c_str(), -1, SQLITE_TRANSIENT);
+    }
+
+    while (SQLITE_ROW == sqlite3_step (stmt)) {
+        std::string name;
+        name = (char *) sqlite3_column_text (stmt, 0);
+        std::cout << name << std::endl;
+    }
+    sqlite3_finalize (stmt);
+    sqlite3_close (db);
+}
+
 int main (int argc, char *argv[])
 {
-    rebuild_db();
+    if (argc == 1) {
+        usage();
+        _exit (0);
+    }
 
+    if (argc >= 2) {
+        if (std::string("rebuild") == argv[1]) {
+            rebuild_db();
+        } else if (std::string("search") == argv[1]) {
+            if (argc == 2) {
+                usage();
+                _exit (0);
+            }
+            search (argv[2]);
+        }
+    }
     return 0;
 }
