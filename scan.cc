@@ -1,6 +1,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <iostream>
+#include <fstream>
 #include <stdint.h>
 #include <glibmm.h>
 #include <sys/types.h>
@@ -42,7 +43,6 @@ void scan (const char *path, boost::icl::interval_set<FT_ULong> &set) {
 
 int main (int argc, char *argv[])
 {
-
     int res;
 
     res = FT_Init_FreeType (&library);
@@ -51,13 +51,50 @@ int main (int argc, char *argv[])
         return 1;
     }
 
-    DIR *dir = opendir ("fonts");
+    std::cout << "Walking ..." << std::endl;
+
+    std::fstream db;
+    db.open("db.php", std::fstream::out);
+    db << "$glyphs = array (" << std::endl;
+
+    std::string font_dir = "fonts";
+    DIR *dir = opendir (font_dir.c_str());
     struct dirent *dirent;
+    int firstdir = 1;
     while (NULL != (dirent = readdir (dir))) {
-        boost::icl::interval_set<FT_ULong> set;
-        scan ("/usr/share/fonts", set);
+        std::string d_name = dirent->d_name;
+        if (d_name == ".") continue;
+        if (d_name == "..") continue;
+
+        std::string full_name = font_dir + "/" + dirent->d_name;
+
+        struct stat sb;
+        stat (full_name.c_str(), &sb);
+        if (S_ISDIR(sb.st_mode)) {
+            boost::icl::interval_set<FT_ULong> set;
+            scan (full_name.c_str(), set);
+
+            if (firstdir) firstdir = 0; else db << ",";
+
+            db << std::endl << "  \"" << dirent->d_name << "\" => array (";
+            int firsttime = 1;
+            for (boost::icl::interval_set<FT_ULong>::iterator iter = set.begin();
+                 iter != set.end(); ++iter)
+            {
+                if (firsttime) firsttime = 0;
+                else db << ",";
+
+                db << std::endl <<"    array(" << iter->lower() << ", " << iter->upper() << ")";
+            }
+            db << std::endl << "  )";
+        }
     }
+    db << std::endl << ");" << std::endl;
+
     closedir (dir);
+    db.close();
+
+    std::cout << "done." << std::endl;
 
 
 
