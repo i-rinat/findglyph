@@ -1,7 +1,6 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <iostream>
-#include <fstream>
 #include <stdint.h>
 #include <glibmm.h>
 #include <sys/types.h>
@@ -53,14 +52,10 @@ int main (int argc, char *argv[])
 
     std::cout << "Walking ..." << std::endl;
 
-    std::fstream db;
-    db.open("db.php", std::fstream::out);
-    db << "$glyphs = array (" << std::endl;
 
     std::string font_dir = "fonts";
     DIR *dir = opendir (font_dir.c_str());
     struct dirent *dirent;
-    int firstdir = 1;
     while (NULL != (dirent = readdir (dir))) {
         std::string d_name = dirent->d_name;
         if (d_name == ".") continue;
@@ -74,29 +69,15 @@ int main (int argc, char *argv[])
             boost::icl::interval_set<FT_ULong> set;
             scan (full_name.c_str(), set);
 
-            if (firstdir) firstdir = 0; else db << ",";
-
-            db << std::endl << "  \"" << dirent->d_name << "\" => array (";
-            int firsttime = 1;
             for (boost::icl::interval_set<FT_ULong>::iterator iter = set.begin();
                  iter != set.end(); ++iter)
             {
-                if (firsttime) firsttime = 0;
-                else db << ",";
-
-                db << std::endl <<"    array(" << iter->lower() << ", " << iter->upper() << ")";
             }
-            db << std::endl << "  )";
         }
     }
-    db << std::endl << ");" << std::endl;
-
     closedir (dir);
-    db.close();
 
     std::cout << "done." << std::endl;
-
-
 
     return 0;
 }
